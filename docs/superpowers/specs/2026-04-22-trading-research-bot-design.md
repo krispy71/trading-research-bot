@@ -24,6 +24,8 @@ A daily-scheduled Python agent that uses Claude to generate systematic BTC tradi
 | `paper/trader.py` | Paper trading state machine, position and equity tracking |
 | `storage/db.py` | DuckDB connection, all read/write operations |
 | `reporting/reporter.py` | CLI reporting over historical runs and equity data |
+| `dashboard/app.py` | FastAPI web server for human approval and reporting UI |
+| `dashboard/templates/` | Jinja2 HTML templates |
 
 ---
 
@@ -117,13 +119,24 @@ equity_curve (date PK, equity, drawdown_pct, run_id FK)
 After backtesting:
 1. Results + full strategy spec written to `runs/YYYY-MM-DD.log` (human-readable)
 2. `strategy_runs.status` set to `pending_approval`
-3. Paper trading does **not** activate until you manually approve
+3. Paper trading does **not** activate until approved via the web dashboard
 
-**Approval CLI:**
-```bash
-python approve.py --run-id <id>    # approve a strategy for paper trading
-python approve.py --list           # show all pending runs
-```
+**Web Dashboard** (`dashboard/app.py`) — a lightweight FastAPI server that runs alongside the agent (started with `python dashboard/app.py`, default port 8080).
+
+**Dashboard pages:**
+
+| Route | Content |
+|---|---|
+| `/` | Overview: active strategy summary, current paper equity, today's regime status |
+| `/runs` | Table of all runs (date, strategy name, status, Sharpe, max drawdown, win rate, CAGR) |
+| `/runs/<id>` | Full run detail: strategy spec rendered as structured HTML, backtest metrics, paper results if active |
+| `/runs/<id>/approve` | POST endpoint — sets `status: approved`, retires any currently active strategy |
+| `/runs/<id>/retire` | POST endpoint — sets `status: retired` |
+| `/equity` | Equity curve chart for the active strategy (rendered with Chart.js, data served from DuckDB) |
+
+**UI approach:** Server-rendered HTML via Jinja2 templates. Minimal styling (classless CSS). No frontend build step — just static HTML + Chart.js loaded from CDN for the equity chart. Approve/Retire actions are HTML form POSTs, no JavaScript required for core functionality.
+
+**Access:** Local only (`127.0.0.1`). Not exposed to the network.
 
 Approving a strategy automatically retires any currently active strategy.
 
@@ -163,7 +176,6 @@ All queries run directly against DuckDB. No separate reporting infrastructure.
 ```
 trading-research-bot/
 ├── agent.py                  # scheduler, pipeline orchestration
-├── approve.py                # approval CLI
 ├── report.py                 # reporting CLI
 ├── config.py                 # configurable parameters (equity, schedule time, etc.)
 ├── data/
@@ -178,6 +190,14 @@ trading-research-bot/
 │   └── db.py                 # DuckDB connection + all queries
 ├── reporting/
 │   └── reporter.py           # report generation
+├── dashboard/
+│   ├── app.py                # FastAPI server (port 8080, localhost only)
+│   └── templates/            # Jinja2 HTML templates
+│       ├── base.html
+│       ├── index.html
+│       ├── runs.html
+│       ├── run_detail.html
+│       └── equity.html
 ├── runs/                     # daily log files (YYYY-MM-DD.log)
 ├── data.duckdb               # persistent database (gitignored)
 ├── docs/
@@ -199,6 +219,9 @@ trading-research-bot/
 | `pandas` | OHLCV data manipulation |
 | `pandas-ta` | Technical indicator computation |
 | `requests` | Binance REST API calls |
+| `fastapi` | Web dashboard server |
+| `uvicorn` | ASGI server for FastAPI |
+| `jinja2` | HTML templating for dashboard |
 
 ---
 
@@ -209,3 +232,4 @@ trading-research-bot/
 - `BACKTEST_WINDOW_DAYS` — lookback for backtesting (default: `365`)
 - `BACKFILL_START` — earliest date to fetch (default: `"2018-01-01"`)
 - `CLAUDE_MODEL` — model ID (default: `"claude-opus-4-7"`)
+- `DASHBOARD_PORT` — web dashboard port (default: `8080`)
