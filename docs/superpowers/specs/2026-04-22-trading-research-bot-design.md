@@ -155,7 +155,7 @@ Approving a strategy automatically retires any currently active strategy.
 
 **Regime monitoring:** Regime filter status logged every day regardless of open positions. Open positions are not force-closed on regime change — the strategy's own exit rules govern.
 
-**Deactivation:** Manual (`python approve.py --retire <id>`) or automatic when a new strategy is approved.
+**Deactivation:** Via the dashboard `/runs/<id>/retire` button, or automatic when a new strategy is approved.
 
 ---
 
