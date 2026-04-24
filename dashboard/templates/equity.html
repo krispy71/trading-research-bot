@@ -7,7 +7,8 @@
 {% elif not chart_data.dates %}
 <p>No paper trading data yet for the active strategy.</p>
 {% else %}
-<p>Active strategy: <strong>{{ active.strategy_json | from_json | attr('name') }}</strong></p>
+{% set active_strategy = active.strategy_json | from_json %}
+<p>Active strategy: <strong>{{ active_strategy.name | default('—') }}</strong></p>
 <canvas id="equityChart" height="80"></canvas>
 <canvas id="drawdownChart" height="40"></canvas>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>

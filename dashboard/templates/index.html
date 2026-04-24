@@ -4,7 +4,8 @@
 <h1>Overview</h1>
 
 {% if active %}
-<h2>Active Strategy: {{ active.strategy_json | from_json | attr('name') }}</h2>
+{% set active_strategy = active.strategy_json | from_json %}
+<h2>Active Strategy: {{ active_strategy.name | default('—') }}</h2>
 <table>
   <tr><th>Status</th><td><span class="badge badge-{{ active.status }}">{{ active.status }}</span></td></tr>
   <tr><th>Activated</th><td>{{ active.created_at }}</td></tr>
