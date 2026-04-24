@@ -23,7 +23,7 @@ A daily-scheduled Python agent that uses Claude to generate systematic BTC tradi
 | `backtest/engine.py` | Pure-Python bar-by-bar backtester |
 | `paper/trader.py` | Paper trading state machine, position and equity tracking |
 | `storage/db.py` | DuckDB connection, all read/write operations |
-| `reporting/reporter.py` | CLI reporting over historical runs and equity data |
+| `reporting/reporter.py` | Shared query library used by the dashboard (not user-facing) |
 | `dashboard/app.py` | FastAPI web server for human approval and reporting UI |
 | `dashboard/templates/` | Jinja2 HTML templates |
 
@@ -128,10 +128,11 @@ After backtesting:
 | Route | Content |
 |---|---|
 | `/` | Overview: active strategy summary, current paper equity, today's regime status |
-| `/runs` | Table of all runs (date, strategy name, status, Sharpe, max drawdown, win rate, CAGR) |
+| `/runs` | Table of all runs (date, strategy name, status, Sharpe, max drawdown, win rate, CAGR) with one-click approve/retire actions |
 | `/runs/<id>` | Full run detail: strategy spec rendered as structured HTML, backtest metrics, paper results if active |
 | `/runs/<id>/approve` | POST endpoint — sets `status: approved`, retires any currently active strategy |
 | `/runs/<id>/retire` | POST endpoint — sets `status: retired` |
+| `/runs/compare` | Side-by-side backtest metrics table for all runs |
 | `/equity` | Equity curve chart for the active strategy (rendered with Chart.js, data served from DuckDB) |
 
 **UI approach:** Server-rendered HTML via Jinja2 templates. Minimal styling (classless CSS). No frontend build step — just static HTML + Chart.js loaded from CDN for the equity chart. Approve/Retire actions are HTML form POSTs, no JavaScript required for core functionality.
@@ -158,16 +159,18 @@ Approving a strategy automatically retires any currently active strategy.
 
 ---
 
-## Reporting CLI
+## Reporting
 
-```bash
-python report.py --summary              # table of all runs with key backtest metrics
-python report.py --run-id <id>          # full detail: spec + backtest + paper results
-python report.py --equity               # equity curve for active strategy
-python report.py --compare              # side-by-side backtest metrics for all runs
-```
+All reporting is surfaced through the web dashboard. There is no separate reporting CLI.
 
-All queries run directly against DuckDB. No separate reporting infrastructure.
+| Dashboard route | Equivalent reporting function |
+|---|---|
+| `/runs` | Summary table of all runs with key backtest metrics |
+| `/runs/<id>` | Full detail: strategy spec + backtest metrics + paper results |
+| `/equity` | Equity curve chart for the active strategy |
+| `/runs/compare` | Side-by-side backtest metrics for all runs |
+
+The `reporting/reporter.py` module remains as a shared query library used by the dashboard — it is not invoked directly by the user.
 
 ---
 
@@ -176,7 +179,6 @@ All queries run directly against DuckDB. No separate reporting infrastructure.
 ```
 trading-research-bot/
 ├── agent.py                  # scheduler, pipeline orchestration
-├── report.py                 # reporting CLI
 ├── config.py                 # configurable parameters (equity, schedule time, etc.)
 ├── data/
 │   └── fetcher.py            # Binance fetch + indicator computation
@@ -197,7 +199,8 @@ trading-research-bot/
 │       ├── index.html
 │       ├── runs.html
 │       ├── run_detail.html
-│       └── equity.html
+│       ├── equity.html
+│       └── compare.html
 ├── runs/                     # daily log files (YYYY-MM-DD.log)
 ├── data.duckdb               # persistent database (gitignored)
 ├── docs/
