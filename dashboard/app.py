@@ -98,11 +98,9 @@ def create_app(db: Database) -> FastAPI:
     return app
 
 
-# Entry point
-DB = Database(config.DB_PATH)
-DB.init_schema()
-app = create_app(DB)
-
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("dashboard.app:app", host="127.0.0.1", port=config.DASHBOARD_PORT, reload=False)
+    _db = Database(config.DB_PATH)
+    _db.init_schema()
+    _app = create_app(_db)
+    uvicorn.run(_app, host="127.0.0.1", port=config.DASHBOARD_PORT)
