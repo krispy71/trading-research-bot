@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Compare Runs — Trading Research Bot{% endblock %}
+{% block content %}
+<h1>Strategy Comparison</h1>
+{% if not runs %}
+<p>No runs with backtest results yet.</p>
+{% else %}
+<table>
+  <thead>
+    <tr>
+      <th>ID</th><th>Date</th><th>Name</th><th>Status</th>
+      <th>Sharpe</th><th>Sortino</th><th>Max DD</th><th>DD Days</th>
+      <th>Win Rate</th><th>Avg R:R</th><th>Trades</th><th>Time in Mkt</th><th>CAGR</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for run in runs %}
+  {% set strategy = run.strategy_json | from_json %}
+  <tr>
+    <td><a href="/runs/{{ run.id }}">{{ run.id }}</a></td>
+    <td>{{ run.created_at | string | truncate(10, end='') }}</td>
+    <td>{{ strategy.name | default('—') }}</td>
+    <td><span class="badge badge-{{ run.status }}">{{ run.status }}</span></td>
+    <td>{{ "%.2f" | format(run.sharpe) if run.sharpe else '—' }}</td>
+    <td>{{ "%.2f" | format(run.sortino) if run.sortino else '—' }}</td>
+    <td>{{ "%.1f%%" | format(run.max_drawdown_pct * 100) if run.max_drawdown_pct else '—' }}</td>
+    <td>{{ run.max_drawdown_days if run.max_drawdown_days else '—' }}</td>
+    <td>{{ "%.1f%%" | format(run.win_rate * 100) if run.win_rate else '—' }}</td>
+    <td>{{ "%.2f" | format(run.avg_rr) if run.avg_rr else '—' }}</td>
+    <td>{{ run.total_trades if run.total_trades else '—' }}</td>
+    <td>{{ "%.1f%%" | format(run.pct_time_in_market * 100) if run.pct_time_in_market else '—' }}</td>
+    <td>{{ "%.1f%%" | format(run.cagr * 100) if run.cagr else '—' }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

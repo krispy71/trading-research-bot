@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Run {{ run.id }} — Trading Research Bot{% endblock %}
+{% block content %}
+<h1>Run {{ run.id }}: {{ strategy.name | default('Unknown') }}</h1>
+<p><span class="badge badge-{{ run.status }}">{{ run.status }}</span> &nbsp; {{ run.created_at }}</p>
+
+{% if run.status == 'pending_approval' %}
+<form method="post" action="/runs/{{ run.id }}/approve" style="display:inline">
+  <button type="submit">✓ Approve for Paper Trading</button>
+</form>
+{% endif %}
+{% if run.status in ('pending_approval', 'approved') %}
+<form method="post" action="/runs/{{ run.id }}/retire" style="display:inline">
+  <button type="submit">Retire</button>
+</form>
+{% endif %}
+
+<h2>Thesis</h2>
+<p>{{ strategy.thesis | default('—') }}</p>
+
+{% if backtest %}
+<h2>Backtest Results</h2>
+<table>
+  <tr><th>Sharpe</th><td>{{ "%.3f" | format(backtest.sharpe) }}</td>
+      <th>Sortino</th><td>{{ "%.3f" | format(backtest.sortino) }}</td></tr>
+  <tr><th>Max Drawdown</th><td>{{ "%.1f%%" | format(backtest.max_drawdown_pct * 100) }} ({{ backtest.max_drawdown_days }} days)</td>
+      <th>CAGR</th><td>{{ "%.1f%%" | format(backtest.cagr * 100) }}</td></tr>
+  <tr><th>Win Rate</th><td>{{ "%.1f%%" | format(backtest.win_rate * 100) }}</td>
+      <th>Avg R:R</th><td>{{ "%.2f" | format(backtest.avg_rr) }}</td></tr>
+  <tr><th>Total Trades</th><td>{{ backtest.total_trades }}</td>
+      <th>Time in Market</th><td>{{ "%.1f%%" | format(backtest.pct_time_in_market * 100) }}</td></tr>
+  <tr><th>Period</th><td colspan="3">{{ backtest.backtest_start }} → {{ backtest.backtest_end }}</td></tr>
+</table>
+{% endif %}
+
+<h2>Regime Filter</h2>
+<pre>{{ strategy.regime_filter | tojson(indent=2) if strategy.regime_filter else '—' }}</pre>
+
+<h2>Entry Rules</h2>
+<h3>Long</h3>
+<ul>{% for c in strategy.entry_long | default([]) %}<li><code>{{ c.condition }}</code> {{ c.operator if c.operator else '' }}</li>{% endfor %}</ul>
+<h3>Short</h3>
+<ul>{% for c in strategy.entry_short | default([]) %}<li><code>{{ c.condition }}</code> {{ c.operator if c.operator else '' }}</li>{% endfor %}</ul>
+
+<h2>Exit Rules</h2>
+{% if strategy.exit %}
+<p><strong>Stop:</strong> {{ strategy.exit.stop_rule }}</p>
+<p><strong>Trailing:</strong> {{ strategy.exit.trailing_rule }}</p>
+<p><strong>Targets:</strong></p>
+<ul>{% for t in strategy.exit.targets | default([]) %}<li>{{ t.r_multiple }}R — {{ "%.0f%%" | format(t.tranche_pct * 100) }} of position</li>{% endfor %}</ul>
+{% endif %}
+
+<h2>Position Sizing</h2>
+<p>{{ strategy.position_sizing | default('—') }}</p>
+
+<h2>Expected Performance Profile</h2>
+{% if strategy.expected_profile %}
+<ul>
+  <li><strong>Win Rate:</strong> {{ "%.0f%%" | format(strategy.expected_profile.win_rate * 100) if strategy.expected_profile.win_rate else '—' }}</li>
+  <li><strong>Avg R:R:</strong> {{ strategy.expected_profile.avg_rr | default('—') }}</li>
+  <li><strong>Underperforms in:</strong> {{ strategy.expected_profile.underperformance_conditions | default('—') }}</li>
+  <li><strong>Drawdown profile:</strong> {{ strategy.expected_profile.drawdown_profile | default('—') }}</li>
+</ul>
+{% endif %}
+
+<h2>Known Failure Modes</h2>
+<ol>{% for fm in strategy.failure_modes | default([]) %}<li>{{ fm }}</li>{% endfor %}</ol>
+
+{% if positions %}
+<h2>Open Paper Positions</h2>
+<table>
+  <thead><tr><th>ID</th><th>Entry Date</th><th>Entry Price</th><th>Stop</th><th>Tranche</th></tr></thead>
+  <tbody>
+  {% for p in positions %}
+  <tr><td>{{ p.id }}</td><td>{{ p.entry_date }}</td><td>${{ "{:,.2f}".format(p.entry_price) }}</td><td>${{ "{:,.2f}".format(p.stop_price) }}</td><td>{{ p.tranche }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

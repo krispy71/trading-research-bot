@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Overview — Trading Research Bot{% endblock %}
+{% block content %}
+<h1>Overview</h1>
+
+{% if active %}
+<h2>Active Strategy: {{ active.strategy_json | from_json | attr('name') }}</h2>
+<table>
+  <tr><th>Status</th><td><span class="badge badge-{{ active.status }}">{{ active.status }}</span></td></tr>
+  <tr><th>Activated</th><td>{{ active.created_at }}</td></tr>
+  {% if current_equity is not none %}
+  <tr><th>Paper Equity</th><td>${{ "{:,.2f}".format(current_equity) }}</td></tr>
+  <tr><th>Current Drawdown</th><td>{{ "{:.1%}".format(current_dd) }}</td></tr>
+  {% endif %}
+</table>
+<p><a href="/runs/{{ active.id }}">View full strategy detail →</a> &nbsp; <a href="/equity">View equity curve →</a></p>
+{% else %}
+<p>No strategy is currently active. <a href="/runs">Review pending runs →</a></p>
+{% endif %}
+{% endblock %}

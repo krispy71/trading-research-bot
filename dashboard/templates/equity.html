@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Equity Curve — Trading Research Bot{% endblock %}
+{% block content %}
+<h1>Equity Curve</h1>
+{% if not active %}
+<p>No active strategy. <a href="/runs">Approve a run →</a></p>
+{% elif not chart_data.dates %}
+<p>No paper trading data yet for the active strategy.</p>
+{% else %}
+<p>Active strategy: <strong>{{ active.strategy_json | from_json | attr('name') }}</strong></p>
+<canvas id="equityChart" height="80"></canvas>
+<canvas id="drawdownChart" height="40"></canvas>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+const dates = {{ chart_data.dates | tojson }};
+const equity = {{ chart_data.equity | tojson }};
+const drawdown = {{ chart_data.drawdown | tojson }};
+
+new Chart(document.getElementById('equityChart'), {
+  type: 'line',
+  data: {
+    labels: dates,
+    datasets: [{
+      label: 'Paper Equity ($)',
+      data: equity,
+      borderColor: '#5cb85c',
+      backgroundColor: 'rgba(92,184,92,0.1)',
+      fill: true,
+      pointRadius: 0,
+      tension: 0.1,
+    }]
+  },
+  options: {
+    plugins: { legend: { display: true } },
+    scales: { x: { ticks: { maxTicksLimit: 12 } } }
+  }
+});
+
+new Chart(document.getElementById('drawdownChart'), {
+  type: 'line',
+  data: {
+    labels: dates,
+    datasets: [{
+      label: 'Drawdown (%)',
+      data: drawdown.map(d => (d * 100).toFixed(2)),
+      borderColor: '#d9534f',
+      backgroundColor: 'rgba(217,83,79,0.1)',
+      fill: true,
+      pointRadius: 0,
+      tension: 0.1,
+    }]
+  },
+  options: {
+    plugins: { legend: { display: true } },
+    scales: { x: { ticks: { maxTicksLimit: 12 } } }
+  }
+});
+</script>
+{% endif %}
+{% endblock %}

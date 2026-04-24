@@ -33,8 +33,7 @@ def create_app(db: Database) -> FastAPI:
             equity = db.get_equity_curve(active["id"])
         current_equity = equity[-1]["equity"] if equity else None
         current_dd = equity[-1]["drawdown_pct"] if equity else None
-        return templates.TemplateResponse("index.html", {
-            "request": request,
+        return templates.TemplateResponse(request, "index.html", {
             "active": active,
             "current_equity": current_equity,
             "current_dd": current_dd,
@@ -43,16 +42,14 @@ def create_app(db: Database) -> FastAPI:
     @app.get("/runs", response_class=HTMLResponse)
     async def runs_list(request: Request):
         runs = get_runs_summary(db)
-        return templates.TemplateResponse("runs.html", {
-            "request": request,
+        return templates.TemplateResponse(request, "runs.html", {
             "runs": runs,
         })
 
     @app.get("/runs/compare", response_class=HTMLResponse)
     async def runs_compare(request: Request):
         runs = get_compare_data(db)
-        return templates.TemplateResponse("compare.html", {
-            "request": request,
+        return templates.TemplateResponse(request, "compare.html", {
             "runs": runs,
         })
 
@@ -61,10 +58,7 @@ def create_app(db: Database) -> FastAPI:
         detail = get_run_detail(db, run_id)
         if detail["run"] is None:
             raise HTTPException(status_code=404, detail="Run not found")
-        return templates.TemplateResponse("run_detail.html", {
-            "request": request,
-            **detail,
-        })
+        return templates.TemplateResponse(request, "run_detail.html", detail)
 
     @app.post("/runs/{run_id}/approve")
     async def approve_run(run_id: int):
@@ -89,8 +83,7 @@ def create_app(db: Database) -> FastAPI:
         chart_data = {"dates": [], "equity": [], "drawdown": []}
         if active:
             chart_data = get_equity_chart_data(db, active["id"])
-        return templates.TemplateResponse("equity.html", {
-            "request": request,
+        return templates.TemplateResponse(request, "equity.html", {
             "active": active,
             "chart_data": chart_data,
         })

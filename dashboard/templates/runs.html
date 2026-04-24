@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Runs — Trading Research Bot{% endblock %}
+{% block content %}
+<h1>Strategy Runs</h1>
+{% if not runs %}
+<p>No runs yet. The agent will generate the first run on its next scheduled execution.</p>
+{% else %}
+<table>
+  <thead>
+    <tr>
+      <th>ID</th><th>Date</th><th>Name</th><th>Status</th>
+      <th>Sharpe</th><th>Max DD</th><th>Win Rate</th><th>Avg R:R</th><th>CAGR</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for run in runs %}
+  {% set strategy = run.strategy_json | from_json %}
+  <tr>
+    <td><a href="/runs/{{ run.id }}">{{ run.id }}</a></td>
+    <td>{{ run.created_at | string | truncate(10, end='') }}</td>
+    <td>{{ strategy.name | default('—') }}</td>
+    <td><span class="badge badge-{{ run.status }}">{{ run.status }}</span></td>
+    <td>{{ "%.2f" | format(run.sharpe) if run.sharpe else '—' }}</td>
+    <td>{{ "%.1f%%" | format(run.max_drawdown_pct * 100) if run.max_drawdown_pct else '—' }}</td>
+    <td>{{ "%.1f%%" | format(run.win_rate * 100) if run.win_rate else '—' }}</td>
+    <td>{{ "%.2f" | format(run.avg_rr) if run.avg_rr else '—' }}</td>
+    <td>{{ "%.1f%%" | format(run.cagr * 100) if run.cagr else '—' }}</td>
+    <td>
+      {% if run.status == 'pending_approval' %}
+      <form method="post" action="/runs/{{ run.id }}/approve" style="display:inline">
+        <button type="submit">Approve</button>
+      </form>
+      {% endif %}
+      {% if run.status in ('pending_approval', 'approved') %}
+      <form method="post" action="/runs/{{ run.id }}/retire" style="display:inline">
+        <button type="submit">Retire</button>
+      </form>
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}
