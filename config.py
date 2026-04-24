@@ -9,5 +9,5 @@ CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-opus-4-7")
 DASHBOARD_PORT = int(os.getenv("DASHBOARD_PORT", "8080"))
 DB_PATH = os.getenv("DB_PATH", "data.duckdb")
 RUNS_DIR = os.getenv("RUNS_DIR", "runs")
-BINANCE_KLINES_URL = "https://api.binance.com/api/v3/klines"
+BINANCE_KLINES_URL = os.getenv("BINANCE_KLINES_URL", "https://api.binance.us/api/v3/klines")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
