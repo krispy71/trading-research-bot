@@ -53,6 +53,33 @@ def test_parse_strategy_response_wrong_failure_modes_count_raises():
     with pytest.raises(ValueError, match="exactly 3"):
         parse_strategy_response(json.dumps(bad))
 
+def test_generate_strategy_uses_cli_when_no_api_key():
+    import json, pandas as pd
+    from datetime import date
+    from unittest.mock import patch, MagicMock
+    from research.generator import generate_strategy
+
+    strategy_json = json.dumps(VALID_STRATEGY)
+    recent = pd.DataFrame([{
+        "timestamp": date(2024, 1, 1), "ema_20": 40000.0, "ema_50": 39000.0,
+        "ema_200": 35000.0, "atr_14": 800.0, "adx_14": 25.0, "rsi_14": 55.0,
+        "bb_upper": 42000.0, "bb_lower": 38000.0, "bb_mid": 40000.0, "volume_sma_20": 1000.0
+    }])
+    mock_result = MagicMock()
+    mock_result.returncode = 0
+    mock_result.stdout = strategy_json
+
+    with patch("research.generator.config.ANTHROPIC_API_KEY", ""), \
+         patch("subprocess.run", return_value=mock_result) as mock_run:
+        result = generate_strategy(recent, [])
+
+    assert result["name"] == "Trend Momentum Filter"
+    mock_run.assert_called_once()
+    args = mock_run.call_args[0][0]
+    assert args[0] == "claude"
+    assert args[1] == "-p"
+
+
 def test_build_prompt_contains_key_sections():
     import pandas as pd
     from datetime import date

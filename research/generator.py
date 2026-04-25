@@ -2,6 +2,7 @@
 import json
 import logging
 import re
+import subprocess
 import anthropic
 import pandas as pd
 import config
@@ -99,17 +100,42 @@ def parse_strategy_response(raw: str) -> dict:
     return strategy
 
 
-def generate_strategy(recent_indicators: pd.DataFrame, prior_runs: list[dict]) -> dict:
-    """Call Claude to generate a strategy. Returns parsed strategy dict."""
+def _call_via_sdk(prompt: str) -> str:
+    """Call Claude via the Anthropic Python SDK (requires ANTHROPIC_API_KEY)."""
     client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
-    prompt = build_prompt(recent_indicators, prior_runs)
-
-    logger.info(f"Calling {config.CLAUDE_MODEL} for strategy generation...")
     message = client.messages.create(
         model=config.CLAUDE_MODEL,
         max_tokens=4096,
         messages=[{"role": "user", "content": prompt}],
     )
-    raw = message.content[0].text
+    return message.content[0].text
+
+
+def _call_via_cli(prompt: str) -> str:
+    """Call Claude via the claude CLI subprocess (uses CLI OAuth auth, no API key needed)."""
+    result = subprocess.run(
+        ["claude", "-p", prompt],
+        capture_output=True, text=True, timeout=180,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"claude CLI exited {result.returncode}: {result.stderr.strip()}")
+    return result.stdout.strip()
+
+
+def generate_strategy(recent_indicators: pd.DataFrame, prior_runs: list[dict]) -> dict:
+    """Call Claude to generate a strategy. Returns parsed strategy dict.
+
+    Uses the Anthropic SDK if ANTHROPIC_API_KEY is set, otherwise falls back
+    to the claude CLI subprocess (which uses CLI OAuth credentials).
+    """
+    prompt = build_prompt(recent_indicators, prior_runs)
+
+    if config.ANTHROPIC_API_KEY:
+        logger.info(f"Calling {config.CLAUDE_MODEL} via SDK for strategy generation...")
+        raw = _call_via_sdk(prompt)
+    else:
+        logger.info("No ANTHROPIC_API_KEY set — calling Claude via CLI subprocess...")
+        raw = _call_via_cli(prompt)
+
     logger.info("Strategy response received, parsing...")
     return parse_strategy_response(raw)
