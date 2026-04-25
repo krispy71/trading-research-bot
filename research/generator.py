@@ -59,8 +59,9 @@ def build_prompt(recent_indicators: pd.DataFrame, prior_runs: list[dict]) -> str
     if prior_runs:
         summaries = []
         for r in prior_runs[-5:]:
+            created_at = str(r.get('created_at', ''))[:10]
             summaries.append(
-                f"Run {r['id']} ({r.get('created_at', '')[:10]}): "
+                f"Run {r['id']} ({created_at}): "
                 f"Sharpe={r.get('sharpe')}, MaxDD={r.get('max_drawdown_pct')}, "
                 f"WinRate={r.get('win_rate')}, AvgRR={r.get('avg_rr')}"
             )
