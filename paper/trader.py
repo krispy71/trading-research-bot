@@ -11,9 +11,30 @@ class PaperTrader:
         self.db = db
         self.run_id = run_id
         self.strategy = strategy
-        self.equity = starting_equity
-        self.peak_equity = starting_equity
-        self._position = None  # active open position dict or None
+
+        # Restore equity from last snapshot (or use starting equity on first run)
+        curve = db.get_equity_curve(run_id)
+        if curve:
+            self.equity = curve[-1]["equity"]
+            self.peak_equity = max(r["equity"] for r in curve)
+        else:
+            self.equity = starting_equity
+            self.peak_equity = starting_equity
+
+        # Restore open position from DB if one exists
+        self._position = None
+        open_positions = db.open_paper_positions(run_id)
+        if open_positions:
+            pos = open_positions[0]
+            side = "long" if pos["stop_price"] < pos["entry_price"] else "short"
+            self._position = {
+                "id": pos["id"],
+                "side": side,
+                "entry_price": pos["entry_price"],
+                "stop_price": pos["stop_price"],
+                "remaining_targets": list(strategy["exit"]["targets"]),
+                "stop_distance": abs(pos["entry_price"] - pos["stop_price"]),
+            }
 
     def process_bar(self, bar: dict):
         """Evaluate one daily bar. Updates DB with any position changes and equity snapshot."""

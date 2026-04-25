@@ -54,9 +54,10 @@ class Database:
         """)
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS equity_curve (
-                date DATE PRIMARY KEY,
+                date DATE,
                 equity DOUBLE, drawdown_pct DOUBLE,
-                run_id INTEGER REFERENCES strategy_runs(id)
+                run_id INTEGER REFERENCES strategy_runs(id),
+                PRIMARY KEY (date, run_id)
             )
         """)
 
