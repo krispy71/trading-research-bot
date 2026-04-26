@@ -11,11 +11,16 @@ pip install -r requirements.txt
 # Run the pipeline once manually (fetches data, generates strategy, backtests, writes log)
 python -c "from agent import run_pipeline; run_pipeline()"
 
-# Start the dashboard (http://localhost:8000)
-python dashboard/app.py
-
-# Start the full scheduled agent (runs daily at 00:05 UTC)
+# Start the agent + dashboard together (recommended)
+# Dashboard auto-starts at http://0.0.0.0:8000, scheduler runs daily at 00:05 UTC
 python agent.py
+
+# Run the pipeline once manually (no scheduler, no dashboard)
+# Only use this when agent.py is NOT already running (DuckDB allows only one writer)
+python -c "from agent import run_pipeline; run_pipeline()"
+
+# Start the dashboard standalone (only when agent.py is NOT running)
+python dashboard/app.py
 ```
 
 ## Configuration

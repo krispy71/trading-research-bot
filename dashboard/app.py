@@ -97,6 +97,8 @@ def create_app(db: Database) -> FastAPI:
 
 if __name__ == "__main__":
     import uvicorn
+    # Note: if agent.py is already running, it holds the DuckDB lock.
+    # Run `python agent.py` instead — it starts the dashboard automatically.
     _db = Database(config.DB_PATH)
     _db.init_schema()
     _app = create_app(_db)

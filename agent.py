@@ -17,8 +17,12 @@ from storage.db import Database
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-DB = Database(config.DB_PATH)
-DB.init_schema()
+def _init_db() -> Database:
+    db = Database(config.DB_PATH)
+    db.init_schema()
+    return db
+
+DB: Database = None  # initialized in main() or overridden in tests via patch("agent.DB", ...)
 
 
 def run_pipeline(runs_dir: str = config.RUNS_DIR):
@@ -139,12 +143,29 @@ def run_paper_trading():
 
 
 def main():
+    global DB
+    import threading
+    import uvicorn
+    from dashboard.app import create_app
+
+    DB = _init_db()
+
+    # Start dashboard in a background thread sharing the same DB connection
+    dash_app = create_app(DB)
+
+    def _run_dashboard():
+        uvicorn.run(dash_app, host=config.DASHBOARD_HOST, port=config.DASHBOARD_PORT, log_level="warning")
+
+    dashboard_thread = threading.Thread(target=_run_dashboard, daemon=True)
+    dashboard_thread.start()
+    logger.info(f"Dashboard started at http://{config.DASHBOARD_HOST}:{config.DASHBOARD_PORT}")
+
     scheduler = BlockingScheduler(timezone="UTC")
     h, m = config.SCHEDULE_TIME.split(":")
     ph, pm = config.PAPER_EVAL_TIME.split(":")
     scheduler.add_job(run_pipeline, "cron", hour=int(h), minute=int(m))
     scheduler.add_job(run_paper_trading, "cron", hour=int(ph), minute=int(pm))
-    logger.info(f"Agent started. Pipeline at {config.SCHEDULE_TIME} UTC, paper at {config.PAPER_EVAL_TIME} UTC.")
+    logger.info(f"Scheduler started. Pipeline at {config.SCHEDULE_TIME} UTC, paper at {config.PAPER_EVAL_TIME} UTC.")
     scheduler.start()
 
 
