@@ -35,3 +35,17 @@ def test_runs_compare_returns_200(client):
 def test_equity_returns_200(client):
     response = client.get("/equity")
     assert response.status_code == 200
+
+def test_pipeline_run_unavailable_without_fn(client):
+    response = client.post("/pipeline/run")
+    assert response.status_code == 503
+
+def test_pipeline_run_triggers_fn(db):
+    from dashboard.app import create_app
+    called = []
+    app = create_app(db, pipeline_fn=lambda: called.append(1))
+    c = TestClient(app)
+    response = c.post("/pipeline/run")
+    assert response.status_code == 200  # after redirect
+    import time; time.sleep(0.1)  # let background task run
+    assert len(called) == 1

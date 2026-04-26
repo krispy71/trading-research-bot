@@ -4,7 +4,8 @@ from pathlib import Path as _Path
 sys.path.insert(0, str(_Path(__file__).parent.parent))
 
 import json as _json
-from fastapi import FastAPI, Request, HTTPException
+import threading
+from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
@@ -24,10 +25,12 @@ def _from_json(value):
         return {}
 
 
-def create_app(db: Database) -> FastAPI:
+def create_app(db: Database, pipeline_fn=None) -> FastAPI:
     app = FastAPI(title="Trading Research Bot Dashboard")
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
     templates.env.filters["from_json"] = _from_json
+
+    _pipeline_state = {"running": False}  # simple lock to prevent concurrent runs
 
     @app.get("/", response_class=HTMLResponse)
     async def index(request: Request):
@@ -41,7 +44,27 @@ def create_app(db: Database) -> FastAPI:
             "active": active,
             "current_equity": current_equity,
             "current_dd": current_dd,
+            "pipeline_available": pipeline_fn is not None,
+            "pipeline_running": _pipeline_state["running"],
+            "pipeline_started": request.query_params.get("pipeline_started") == "1",
         })
+
+    @app.post("/pipeline/run")
+    async def trigger_pipeline(background_tasks: BackgroundTasks):
+        if pipeline_fn is None:
+            raise HTTPException(status_code=503, detail="Pipeline not available in standalone dashboard mode")
+        if _pipeline_state["running"]:
+            return RedirectResponse(url="/?pipeline_started=1", status_code=303)
+
+        def _run():
+            _pipeline_state["running"] = True
+            try:
+                pipeline_fn()
+            finally:
+                _pipeline_state["running"] = False
+
+        background_tasks.add_task(_run)
+        return RedirectResponse(url="/?pipeline_started=1", status_code=303)
 
     @app.get("/runs", response_class=HTMLResponse)
     async def runs_list(request: Request):

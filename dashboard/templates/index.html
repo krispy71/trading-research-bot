@@ -3,6 +3,18 @@
 {% block content %}
 <h1>Overview</h1>
 
+{% if pipeline_started %}
+<p><strong>Pipeline started.</strong> Fetch → generate strategy → backtest → log. Check <a href="/runs">Runs</a> in a few minutes for the new result.</p>
+{% endif %}
+
+{% if pipeline_available %}
+<form method="post" action="/pipeline/run">
+  <button type="submit" {% if pipeline_running %}disabled{% endif %}>
+    {% if pipeline_running %}Pipeline running…{% else %}Run Pipeline Now{% endif %}
+  </button>
+</form>
+{% endif %}
+
 {% if active %}
 {% set active_strategy = active.strategy_json | from_json %}
 <h2>Active Strategy: {{ active_strategy.name | default('—') }}</h2>

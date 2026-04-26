@@ -8,20 +8,29 @@ A daily-scheduled Python agent that generates systematic BTC trading strategies 
 # Install dependencies
 pip install -r requirements.txt
 
-# Run the pipeline once manually (fetches data, generates strategy, backtests, writes log)
-python -c "from agent import run_pipeline; run_pipeline()"
-
 # Start the agent + dashboard together (recommended)
-# Dashboard auto-starts at http://0.0.0.0:8000, scheduler runs daily at 00:05 UTC
+# Dashboard available at http://0.0.0.0:8000 — includes a "Run Pipeline Now" button
+# Scheduler also runs the pipeline automatically at 00:05 UTC daily
 python agent.py
 
-# Run the pipeline once manually (no scheduler, no dashboard)
-# Only use this when agent.py is NOT already running (DuckDB allows only one writer)
+# Run the pipeline once manually (only when agent.py is NOT running)
+# DuckDB allows only one writer at a time
 python -c "from agent import run_pipeline; run_pipeline()"
 
 # Start the dashboard standalone (only when agent.py is NOT running)
 python dashboard/app.py
 ```
+
+## What the Pipeline Does
+
+Each pipeline run executes these steps in order:
+
+1. **Fetch OHLCV** — Downloads BTC/USDT daily candles from Binance (incremental: only fetches new candles since the last stored date; full backfill to 2018-01-01 on first run)
+2. **Compute indicators** — Calculates EMA-20/50/200, ATR-14, ADX-14, RSI-14, Bollinger Bands (20,2), Volume SMA-20 using `pandas-ta`; stores results in the `indicators` table
+3. **Generate strategy** — Sends the last 90 days of indicator data + the 5 most recent run results to Claude; Claude returns a structured JSON strategy spec with entry/exit rules, regime filter, position sizing, and failure modes
+4. **Backtest** — Runs a bar-by-bar simulation over the past 365 days using the generated strategy; computes Sharpe, Sortino, max drawdown, win rate, average R:R, CAGR, and % time in market
+5. **Write log** — Saves a human-readable summary to `runs/YYYY-MM-DD.log` with the full strategy spec and backtest metrics
+6. **Set pending approval** — Marks the run `pending_approval` in the database; paper trading does not activate until you approve the run via the dashboard
 
 ## Configuration
 
@@ -51,7 +60,7 @@ python -m pytest tests/ -v
 
 | Route | Description |
 |---|---|
-| `http://<host>:8000/` | Overview: active strategy, paper equity |
+| `http://<host>:8000/` | Overview: active strategy, paper equity, **Run Pipeline Now** button |
 | `http://<host>:8000/runs` | All strategy runs with approve/retire actions |
 | `http://<host>:8000/runs/<id>` | Full run detail: strategy spec + backtest metrics |
 | `http://<host>:8000/runs/compare` | Side-by-side metrics comparison |

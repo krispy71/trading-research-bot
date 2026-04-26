@@ -151,7 +151,7 @@ def main():
     DB = _init_db()
 
     # Start dashboard in a background thread sharing the same DB connection
-    dash_app = create_app(DB)
+    dash_app = create_app(DB, pipeline_fn=run_pipeline)
 
     def _run_dashboard():
         uvicorn.run(dash_app, host=config.DASHBOARD_HOST, port=config.DASHBOARD_PORT, log_level="warning")
