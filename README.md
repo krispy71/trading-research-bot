@@ -11,7 +11,7 @@ pip install -r requirements.txt
 # Run the pipeline once manually (fetches data, generates strategy, backtests, writes log)
 python -c "from agent import run_pipeline; run_pipeline()"
 
-# Start the dashboard (http://localhost:8080)
+# Start the dashboard (http://localhost:8888)
 python dashboard/app.py
 
 # Start the full scheduled agent (runs daily at 00:05 UTC)
@@ -31,7 +31,8 @@ All settings are via environment variables (defaults shown):
 | `BACKTEST_WINDOW_DAYS` | `365` | Lookback window for backtesting |
 | `BACKFILL_START` | `2018-01-01` | Earliest date to fetch Binance data |
 | `CLAUDE_MODEL` | `claude-opus-4-7` | Claude model used for strategy generation |
-| `DASHBOARD_PORT` | `8080` | Dashboard web server port |
+| `DASHBOARD_PORT` | `8888` | Dashboard web server port |
+| `DASHBOARD_HOST` | `0.0.0.0` | Dashboard bind address |
 | `DB_PATH` | `data.duckdb` | DuckDB database file path |
 | `BINANCE_KLINES_URL` | `https://api.binance.us/api/v3/klines` | Binance API endpoint |
 
@@ -45,11 +46,11 @@ python -m pytest tests/ -v
 
 | Route | Description |
 |---|---|
-| `http://localhost:8080/` | Overview: active strategy, paper equity |
-| `http://localhost:8080/runs` | All strategy runs with approve/retire actions |
-| `http://localhost:8080/runs/<id>` | Full run detail: strategy spec + backtest metrics |
-| `http://localhost:8080/runs/compare` | Side-by-side metrics comparison |
-| `http://localhost:8080/equity` | Equity curve chart for active strategy |
+| `http://<host>:8888/` | Overview: active strategy, paper equity |
+| `http://<host>:8888/runs` | All strategy runs with approve/retire actions |
+| `http://<host>:8888/runs/<id>` | Full run detail: strategy spec + backtest metrics |
+| `http://<host>:8888/runs/compare` | Side-by-side metrics comparison |
+| `http://<host>:8888/equity` | Equity curve chart for active strategy |
 
 ---
 

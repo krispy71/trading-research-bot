@@ -100,4 +100,4 @@ if __name__ == "__main__":
     _db = Database(config.DB_PATH)
     _db.init_schema()
     _app = create_app(_db)
-    uvicorn.run(_app, host="127.0.0.1", port=config.DASHBOARD_PORT)
+    uvicorn.run(_app, host=config.DASHBOARD_HOST, port=config.DASHBOARD_PORT)
