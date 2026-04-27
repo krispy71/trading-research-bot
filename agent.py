@@ -53,7 +53,7 @@ def run_pipeline(runs_dir: str = config.RUNS_DIR):
 
     try:
         strategy = generate_strategy(recent_indicators, prior_runs)
-        DB.conn.execute(
+        DB._exec(
             "UPDATE strategy_runs SET strategy_json = ? WHERE id = ?",
             [json.dumps(strategy), run_id]
         )
@@ -119,7 +119,7 @@ def run_paper_trading():
         logger.info("No approved strategy. Skipping paper trading.")
         return
 
-    approved_count = DB.conn.execute(
+    approved_count = DB._exec(
         "SELECT COUNT(*) FROM strategy_runs WHERE status = 'approved'"
     ).fetchone()[0]
     if approved_count > 1:
