@@ -199,10 +199,7 @@ def create_app(db: Database, pipeline_fn=None) -> FastAPI:
 
                 # Fetch missing bars for this interval
                 latest = db.latest_ohlcv_timestamp_interval(interval)
-                if latest is None or dt_from < latest:
-                    fetch_start = dt_from
-                else:
-                    fetch_start = latest
+                fetch_start = dt_from if latest is None else max(dt_from, latest)
                 rows = fetch_ohlcv(
                     fetch_start.date(), dt_to.date(),
                     interval=interval,
@@ -248,14 +245,12 @@ def create_app(db: Database, pipeline_fn=None) -> FastAPI:
             return templates.TemplateResponse(request, "backtest_status.html", {
                 "backtest_id": backtest_id,
                 "error": row.get("error_message", "Unknown error"),
-                "done": False,
             })
         if row["total_trades"] != -1:
             return RedirectResponse(url=f"/backtest/{backtest_id}", status_code=303)
         return templates.TemplateResponse(request, "backtest_status.html", {
             "backtest_id": backtest_id,
             "error": None,
-            "done": False,
         })
 
     @app.get("/backtest/{backtest_id}", response_class=HTMLResponse)
