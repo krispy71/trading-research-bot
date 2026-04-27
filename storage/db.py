@@ -38,7 +38,12 @@ class Database:
             return rows, cols
 
     def _migrate_interval_schema(self):
-        """Migrate ohlcv and indicators to multi-interval schema if not already done. Idempotent."""
+        """Migrate ohlcv and indicators to multi-interval schema if not already done.
+
+        Assumes `ohlcv` and `indicators` tables already exist.
+        Must only be called from `init_schema` after those tables are created.
+        Is idempotent: safe to call repeatedly on an already-migrated schema.
+        """
         ohlcv_cols = {r[1] for r in self._exec("PRAGMA table_info(ohlcv)").fetchall()}
         if 'interval' not in ohlcv_cols:
             self._exec("ALTER TABLE ohlcv RENAME TO ohlcv_old")
@@ -166,10 +171,9 @@ class Database:
         self.upsert_ohlcv_interval(rows, '1d')
 
     def latest_ohlcv_timestamp(self) -> Optional[date]:
-        with self._lock:
-            result = self.conn.execute(
-                "SELECT MAX(timestamp)::DATE FROM ohlcv WHERE interval = '1d'"
-            ).fetchone()
+        result = self._exec(
+            "SELECT MAX(timestamp)::DATE FROM ohlcv WHERE interval = '1d'"
+        ).fetchone()
         return result[0] if result else None
 
     def get_ohlcv(self, start: date, end: date) -> pd.DataFrame:
@@ -204,7 +208,7 @@ class Database:
         )
 
     def upsert_ohlcv_interval(self, rows: list[dict], interval: str):
-        """Stub — full implementation in Task 2."""
+        """Insert/replace OHLCV rows for the given interval."""
         if not rows:
             return
         df = pd.DataFrame([{**r, 'interval': interval} for r in rows])
@@ -213,7 +217,7 @@ class Database:
             self.conn.execute("INSERT OR REPLACE INTO ohlcv SELECT * FROM df")
 
     def upsert_indicators_interval(self, rows: list[dict], interval: str):
-        """Stub — full implementation in Task 2."""
+        """Insert/replace indicator rows for the given interval."""
         if not rows:
             return
         df = pd.DataFrame([{**r, 'interval': interval} for r in rows])
