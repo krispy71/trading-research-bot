@@ -12,16 +12,22 @@ logger = logging.getLogger(__name__)
 def fetch_ohlcv(
     start: date,
     end: date,
+    interval: str = '1d',
     backfill_start: Optional[date] = None,
 ) -> list[dict]:
-    """Fetch BTC/USDT daily candles from Binance between start and end (inclusive)."""
+    """Fetch BTC/USDT candles from Binance between start and end (inclusive).
+
+    Returns rows with datetime timestamps (UTC-aware) for all intervals.
+    """
     rows = []
-    cursor = start
-    while cursor <= end:
+    cursor_ms = int(datetime.combine(start, datetime.min.time()).timestamp() * 1000)
+    end_ms = int(datetime.combine(end, datetime.max.time()).timestamp() * 1000)
+
+    while cursor_ms <= end_ms:
         params = {
             "symbol": "BTCUSDT",
-            "interval": "1d",
-            "startTime": int(datetime.combine(cursor, datetime.min.time()).timestamp() * 1000),
+            "interval": interval,
+            "startTime": cursor_ms,
             "limit": 1000,
         }
         resp = requests.get(config.BINANCE_KLINES_URL, params=params, timeout=30)
@@ -30,26 +36,28 @@ def fetch_ohlcv(
         if not klines:
             break
         for k in klines:
-            ts = datetime.fromtimestamp(k[0] / 1000, tz=timezone.utc).date()
-            if ts > end:
+            bar_open_ms = k[0]
+            if bar_open_ms > end_ms:
                 break
+            ts = datetime.fromtimestamp(bar_open_ms / 1000, tz=timezone.utc)
             rows.append({
                 "timestamp": ts,
+                "interval": interval,
                 "open": float(k[1]),
                 "high": float(k[2]),
                 "low": float(k[3]),
                 "close": float(k[4]),
                 "volume": float(k[5]),
             })
-        last_ts = datetime.fromtimestamp(klines[-1][0] / 1000, tz=timezone.utc).date()
-        cursor = last_ts + timedelta(days=1)
+        # Advance cursor past the last bar's close time (k[6] = close time ms)
+        cursor_ms = klines[-1][6] + 1
         if len(klines) < 1000:
             break
 
-    if rows and backfill_start and rows[0]["timestamp"] > backfill_start:
+    if rows and backfill_start and rows[0]["timestamp"].date() > backfill_start:
         logger.warning(
-            f"Binance data starts at {rows[0]['timestamp']}, "
-            f"earlier than requested backfill start {backfill_start}. "
+            f"Binance data starts at {rows[0]['timestamp'].date()}, "
+            f"later than requested backfill start {backfill_start}. "
             f"Using earliest available data."
         )
     return rows

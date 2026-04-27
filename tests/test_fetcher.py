@@ -1,7 +1,7 @@
 # tests/test_fetcher.py
 import pytest
 from unittest.mock import patch, MagicMock
-from datetime import date
+from datetime import date, datetime
 import pandas as pd
 from data.fetcher import fetch_ohlcv, compute_indicators
 
@@ -16,8 +16,37 @@ def test_fetch_ohlcv_returns_list_of_dicts():
         mock_get.return_value.raise_for_status = MagicMock()
         rows = fetch_ohlcv(date(2024, 1, 1), date(2024, 1, 2))
     assert len(rows) == 2
-    assert rows[0]["timestamp"] == date(2024, 1, 1)
+    # timestamp is now datetime, not date
+    assert rows[0]["timestamp"].date() == date(2024, 1, 1)
     assert rows[0]["close"] == 40500.0
+
+def test_fetch_ohlcv_accepts_interval_param():
+    """interval param is passed to Binance API and included in returned rows."""
+    with patch("data.fetcher.requests.get") as mock_get:
+        mock_get.return_value.json.return_value = SAMPLE_KLINES
+        mock_get.return_value.raise_for_status = MagicMock()
+        rows = fetch_ohlcv(date(2024, 1, 1), date(2024, 1, 2), interval='1h')
+    assert len(rows) == 2
+    assert rows[0]["interval"] == "1h"
+    call_params = mock_get.call_args[1]["params"]
+    assert call_params["interval"] == "1h"
+
+
+def test_fetch_ohlcv_default_interval_is_1d():
+    with patch("data.fetcher.requests.get") as mock_get:
+        mock_get.return_value.json.return_value = SAMPLE_KLINES
+        mock_get.return_value.raise_for_status = MagicMock()
+        rows = fetch_ohlcv(date(2024, 1, 1), date(2024, 1, 2))
+    assert rows[0]["interval"] == "1d"
+
+
+def test_fetch_ohlcv_timestamp_is_datetime():
+    """Returned timestamps are datetime objects (not date) for all intervals."""
+    with patch("data.fetcher.requests.get") as mock_get:
+        mock_get.return_value.json.return_value = SAMPLE_KLINES
+        mock_get.return_value.raise_for_status = MagicMock()
+        rows = fetch_ohlcv(date(2024, 1, 1), date(2024, 1, 2))
+    assert isinstance(rows[0]["timestamp"], datetime)
 
 def test_fetch_ohlcv_warns_if_data_starts_after_backfill(caplog):
     with patch("data.fetcher.requests.get") as mock_get:
