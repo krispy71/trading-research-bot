@@ -20,8 +20,8 @@ def fetch_ohlcv(
     Returns rows with datetime timestamps (UTC-aware) for all intervals.
     """
     rows = []
-    cursor_ms = int(datetime.combine(start, datetime.min.time()).timestamp() * 1000)
-    end_ms = int(datetime.combine(end, datetime.max.time()).timestamp() * 1000)
+    cursor_ms = int(datetime(start.year, start.month, start.day, 0, 0, 0, tzinfo=timezone.utc).timestamp() * 1000)
+    end_ms = int(datetime(end.year, end.month, end.day, 23, 59, 59, 999999, tzinfo=timezone.utc).timestamp() * 1000)
 
     while cursor_ms <= end_ms:
         params = {
