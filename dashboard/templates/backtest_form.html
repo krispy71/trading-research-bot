@@ -1,2 +1,108 @@
 {% extends "base.html" %}
-{% block content %}<p>form</p>{% endblock %}
+{% block title %}Custom Backtest — Trading Research Bot{% endblock %}
+{% block content %}
+<h1>Custom Backtest</h1>
+
+<form method="post" action="/backtest/run">
+  <label>Strategy
+    <select name="run_id" id="run_select" required>
+      {% for run in runs %}
+      {% set s = run.strategy_json | from_json %}
+      <option value="{{ run.id }}"
+        data-regime-logic="{{ (run.strategy_json | from_json).regime_filter.logic | default('') }}">
+        #{{ run.id }} — {{ s.name | default('(unnamed)') }} [{{ run.status }}]
+      </option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label>Interval
+    <select name="interval">
+      {% for iv in intervals %}
+      <option value="{{ iv }}" {% if iv == '1d' %}selected{% endif %}>{{ iv }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <fieldset>
+    <legend>Date Range</legend>
+    {% for label, val in [("Last 30d","30d"),("Last 90d","90d"),("Last 6mo","6mo"),
+                          ("Last 1yr","1yr"),("Last 2yr","2yr"),("Last 3yr","3yr"),
+                          ("All time","all"),("Custom","custom")] %}
+    <label><input type="radio" name="date_preset" value="{{ val }}"
+      {% if val == '1yr' %}checked{% endif %}
+      onchange="document.getElementById('custom_dates').style.display=
+        (this.value==='custom'?'block':'none')"> {{ label }}</label>
+    {% endfor %}
+    <div id="custom_dates" style="display:none; margin-top:0.5em">
+      <label>From <input type="datetime-local" name="date_from"></label>
+      <label>To <input type="datetime-local" name="date_to"></label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Regime Filter</legend>
+    <label><input type="radio" name="regime_filter_mode" value="strategy" checked
+      onchange="toggleConditions(this.value)"> Use strategy's regime filter</label><br>
+    <label><input type="radio" name="regime_filter_mode" value="disabled"
+      onchange="toggleConditions(this.value)"> Disable regime filter entirely</label><br>
+    <label><input type="radio" name="regime_filter_mode" value="custom"
+      onchange="toggleConditions(this.value)"> Custom — select conditions below</label>
+
+    <div id="conditions_panel" style="display:none; margin-top:0.5em">
+      <div id="conditions_list"></div>
+      <input type="hidden" name="regime_filter_overrides" id="overrides_input" value="{}">
+    </div>
+  </fieldset>
+
+  <button type="submit">Run Backtest</button>
+</form>
+
+<script>
+function getConditions(select) {
+  var opt = select.options[select.selectedIndex];
+  var logic = opt.getAttribute('data-regime-logic') || '';
+  if (!logic) return [];
+  return logic.split(' AND ').map(function(s) { return s.trim(); }).filter(Boolean);
+}
+
+function renderConditions() {
+  var select = document.getElementById('run_select');
+  var conds = getConditions(select);
+  var list = document.getElementById('conditions_list');
+  list.innerHTML = '';
+  conds.forEach(function(cond) {
+    var id = 'cond_' + cond.replace(/[^a-zA-Z0-9]/g,'_');
+    var label = document.createElement('label');
+    label.style.display = 'block';
+    var cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.checked = true; cb.id = id;
+    cb.setAttribute('data-cond', cond);
+    cb.addEventListener('change', updateOverrides);
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(' ' + cond));
+    list.appendChild(label);
+  });
+  if (conds.length === 0) {
+    list.innerHTML = '<em>This strategy has no parseable regime filter conditions.</em>';
+  }
+  updateOverrides();
+}
+
+function updateOverrides() {
+  var overrides = {};
+  document.querySelectorAll('#conditions_list input[type=checkbox]').forEach(function(cb) {
+    overrides[cb.getAttribute('data-cond')] = cb.checked;
+  });
+  document.getElementById('overrides_input').value = JSON.stringify(overrides);
+}
+
+function toggleConditions(mode) {
+  document.getElementById('conditions_panel').style.display =
+    (mode === 'custom') ? 'block' : 'none';
+}
+
+document.getElementById('run_select').addEventListener('change', renderConditions);
+renderConditions();
+</script>
+{% endblock %}

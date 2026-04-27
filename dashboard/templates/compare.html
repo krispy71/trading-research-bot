@@ -35,4 +35,34 @@
   </tbody>
 </table>
 {% endif %}
+
+<h2 style="margin-top:2em">Custom Backtests</h2>
+{% if not custom_backtests %}
+<p>No custom backtests saved yet. <a href="/backtest">Run one</a>.</p>
+{% else %}
+<table>
+  <thead>
+    <tr>
+      <th>ID</th><th>Strategy</th><th>Interval</th><th>Date Range</th><th>Regime Mode</th>
+      <th>Sharpe</th><th>Max DD</th><th>Win Rate</th><th>CAGR</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for cb in custom_backtests %}
+  {% set s = cb.strategy_json | from_json %}
+  <tr>
+    <td><a href="/backtest/{{ cb.id }}">{{ cb.id }}</a></td>
+    <td>{{ s.name | default('—') }}</td>
+    <td>{{ cb.interval }}</td>
+    <td>{{ cb.date_from | string | truncate(10, end='') }} – {{ cb.date_to | string | truncate(10, end='') }}</td>
+    <td>{{ cb.regime_filter_mode }}</td>
+    <td>{{ "%.2f" | format(cb.sharpe) if cb.sharpe else '—' }}</td>
+    <td>{{ "%.1f%%" | format(cb.max_drawdown_pct * 100) if cb.max_drawdown_pct else '—' }}</td>
+    <td>{{ "%.1f%%" | format(cb.win_rate * 100) if cb.win_rate else '—' }}</td>
+    <td>{{ "%.1f%%" | format(cb.cagr * 100) if cb.cagr else '—' }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
 {% endblock %}

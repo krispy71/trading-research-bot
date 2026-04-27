@@ -1,2 +1,17 @@
 {% extends "base.html" %}
-{% block content %}<p>refresh</p>{% endblock %}
+{% block title %}Backtest Status — Trading Research Bot{% endblock %}
+{% block content %}
+{% if not error %}
+<meta http-equiv="refresh" content="3">
+{% endif %}
+
+<h1>Backtest #{{ backtest_id }}</h1>
+
+{% if error %}
+<p style="color: #d9534f;"><strong>Error:</strong> {{ error }}</p>
+<p><a href="/backtest">← Run another backtest</a></p>
+{% else %}
+<p>Backtest in progress — fetching bars and running simulation…</p>
+<p style="color: #888; font-size: 0.9em;">This page refreshes every 3 seconds automatically.</p>
+{% endif %}
+{% endblock %}

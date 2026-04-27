@@ -1,2 +1,82 @@
 {% extends "base.html" %}
-{% block content %}<p>result</p>{% endblock %}
+{% block title %}Backtest #{{ custom.id }} — Trading Research Bot{% endblock %}
+{% block content %}
+<h1>Custom Backtest #{{ custom.id }}</h1>
+
+{% set run_strategy = run.strategy_json | from_json %}
+
+<div style="display:flex; gap:2em; flex-wrap:wrap">
+  <div style="min-width:260px">
+    <h2>Parameters</h2>
+    <table>
+      <tr><th>Strategy</th><td><a href="/runs/{{ run.id }}">#{{ run.id }} — {{ run_strategy.name | default('—') }}</a></td></tr>
+      <tr><th>Interval</th><td>{{ custom.interval }}</td></tr>
+      <tr><th>Date From</th><td>{{ custom.date_from | string | truncate(19, end='') }}</td></tr>
+      <tr><th>Date To</th><td>{{ custom.date_to | string | truncate(19, end='') }}</td></tr>
+      <tr><th>Regime Mode</th><td>{{ custom.regime_filter_mode }}</td></tr>
+      {% if custom.regime_filter_mode == 'custom' %}
+      <tr><th>Active Conditions</th><td>
+        {% for cond, enabled in overrides.items() %}
+          {% if enabled %}<code>{{ cond }}</code><br>{% endif %}
+        {% endfor %}
+      </td></tr>
+      {% endif %}
+    </table>
+  </div>
+
+  <div style="flex:1; min-width:360px">
+    <h2>Metrics Comparison</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Metric</th>
+          <th>This Backtest</th>
+          <th>Original{% if original_backtest %} ({{ original_backtest.backtest_start | string | truncate(10, end='') }}){% endif %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set ob = original_backtest or {} %}
+        {% for label, ckey in [
+          ("Sharpe", "sharpe"),
+          ("Sortino", "sortino"),
+          ("Max Drawdown %", "max_drawdown_pct"),
+          ("Max Drawdown Days", "max_drawdown_days"),
+          ("Win Rate", "win_rate"),
+          ("Avg R:R", "avg_rr"),
+          ("Total Trades", "total_trades"),
+          ("% Time in Market", "pct_time_in_market"),
+          ("CAGR", "cagr"),
+        ] %}
+        <tr>
+          <td>{{ label }}</td>
+          <td>
+            {% if custom[ckey] is not none %}
+              {% if ckey in ["max_drawdown_pct", "win_rate", "pct_time_in_market", "cagr"] %}
+                {{ "%.1f%%" | format(custom[ckey] * 100) }}
+              {% elif ckey in ["max_drawdown_days", "total_trades"] %}
+                {{ custom[ckey] }}
+              {% else %}
+                {{ "%.2f" | format(custom[ckey]) }}
+              {% endif %}
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% if ob.get(ckey) is not none %}
+              {% if ckey in ["max_drawdown_pct", "win_rate", "pct_time_in_market", "cagr"] %}
+                {{ "%.1f%%" | format(ob[ckey] * 100) }}
+              {% elif ckey in ["max_drawdown_days", "total_trades"] %}
+                {{ ob[ckey] }}
+              {% else %}
+                {{ "%.2f" | format(ob[ckey]) }}
+              {% endif %}
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<p style="margin-top:1.5em"><a href="/backtest">← Run another backtest</a> &nbsp; <a href="/runs/compare">Compare all</a></p>
+{% endblock %}
