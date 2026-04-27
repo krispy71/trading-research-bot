@@ -31,12 +31,11 @@
                           ("All time","all"),("Custom","custom")] %}
     <label><input type="radio" name="date_preset" value="{{ val }}"
       {% if val == '1yr' %}checked{% endif %}
-      onchange="document.getElementById('custom_dates').style.display=
-        (this.value==='custom'?'block':'none')"> {{ label }}</label>
+      onchange="toggleCustomDates(this.value)"> {{ label }}</label>
     {% endfor %}
     <div id="custom_dates" style="display:none; margin-top:0.5em">
-      <label>From <input type="datetime-local" name="date_from"></label>
-      <label>To <input type="datetime-local" name="date_to"></label>
+      <label>From <input type="datetime-local" name="date_from" id="date_from_input"></label>
+      <label>To <input type="datetime-local" name="date_to" id="date_to_input"></label>
     </div>
   </fieldset>
 
@@ -59,6 +58,13 @@
 </form>
 
 <script>
+function toggleCustomDates(val) {
+  var show = (val === 'custom');
+  document.getElementById('custom_dates').style.display = show ? 'block' : 'none';
+  document.getElementById('date_from_input').required = show;
+  document.getElementById('date_to_input').required = show;
+}
+
 function getConditions(select) {
   var opt = select.options[select.selectedIndex];
   var logic = opt.getAttribute('data-regime-logic') || '';

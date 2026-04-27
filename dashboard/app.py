@@ -162,7 +162,13 @@ def create_app(db: Database, pipeline_fn=None) -> FastAPI:
         regime_filter_mode: str = Form(...),
         regime_filter_overrides: str = Form("{}"),
     ):
-        dt_from, dt_to = _parse_date_range(date_preset, date_from, date_to)
+        try:
+            dt_from, dt_to = _parse_date_range(date_preset, date_from, date_to)
+        except (ValueError, TypeError) as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid date range: {exc}"
+            )
         estimated = _estimate_bars(interval, dt_from, dt_to)
         if estimated < 250:
             raise HTTPException(
