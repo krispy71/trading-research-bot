@@ -2,7 +2,7 @@
 import pytest
 import duckdb
 import pandas as pd
-from datetime import date
+from datetime import date, datetime, timezone
 from storage.db import Database
 
 @pytest.fixture
@@ -140,8 +140,6 @@ def test_init_schema_is_idempotent_with_new_schema(db):
     assert count == 0  # no data added, just no crash
 
 
-from datetime import datetime, timezone
-
 def test_upsert_ohlcv_interval_stores_intraday(db):
     rows = [
         {"timestamp": datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc),
@@ -205,7 +203,6 @@ def test_get_indicators_interval(db):
 
 def test_insert_custom_backtest_and_get(db):
     run_id = db.insert_strategy_run('{"name": "test"}')
-    from datetime import datetime, timezone
     backtest_id = db.insert_custom_backtest({
         "run_id": run_id,
         "interval": "1h",
@@ -222,7 +219,6 @@ def test_insert_custom_backtest_and_get(db):
 
 def test_update_custom_backtest_results(db):
     run_id = db.insert_strategy_run('{}')
-    from datetime import datetime, timezone
     backtest_id = db.insert_custom_backtest({
         "run_id": run_id,
         "interval": "4h",
@@ -243,7 +239,6 @@ def test_update_custom_backtest_results(db):
 
 def test_all_custom_backtests(db):
     run_id = db.insert_strategy_run('{}')
-    from datetime import datetime, timezone
     db.insert_custom_backtest({
         "run_id": run_id, "interval": "1d",
         "date_from": datetime(2024, 1, 1, tzinfo=timezone.utc),
