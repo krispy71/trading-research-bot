@@ -88,3 +88,53 @@ def test_upsert_equity_curve(db):
     db.upsert_equity_curve(date(2024, 1, 1), 101000.0, 0.0, run_id)  # idempotent
     count = db.conn.execute("SELECT COUNT(*) FROM equity_curve").fetchone()[0]
     assert count == 1
+
+
+def test_migration_preserves_ohlcv_data():
+    """Simulate upgrade: old schema → init_schema() → data still present with interval='1d'."""
+    d = Database(":memory:")
+    # Manually create old-style schema (no interval column)
+    d.conn.execute("""
+        CREATE TABLE ohlcv (
+            timestamp DATE PRIMARY KEY,
+            open DOUBLE, high DOUBLE, low DOUBLE, close DOUBLE, volume DOUBLE
+        )
+    """)
+    d.conn.execute("""
+        CREATE TABLE indicators (
+            timestamp DATE PRIMARY KEY,
+            ema_20 DOUBLE, ema_50 DOUBLE, ema_200 DOUBLE,
+            atr_14 DOUBLE, adx_14 DOUBLE, rsi_14 DOUBLE,
+            bb_upper DOUBLE, bb_lower DOUBLE, bb_mid DOUBLE,
+            volume_sma_20 DOUBLE
+        )
+    """)
+    d.conn.execute(
+        "INSERT INTO ohlcv VALUES ('2024-01-01', 40000, 41000, 39000, 40500, 1000)"
+    )
+    d.conn.execute(
+        "INSERT INTO indicators VALUES ('2024-01-01', 1,2,3,4,5,6,7,8,9,10)"
+    )
+    # Run migration via init_schema
+    d.init_schema()
+    # Data preserved with interval='1d'
+    ohlcv_rows = d.conn.execute("SELECT interval, open FROM ohlcv").fetchall()
+    assert len(ohlcv_rows) == 1
+    assert ohlcv_rows[0][0] == '1d'
+    assert ohlcv_rows[0][1] == 40000.0
+    ind_rows = d.conn.execute("SELECT interval, ema_20 FROM indicators").fetchall()
+    assert len(ind_rows) == 1
+    assert ind_rows[0][0] == '1d'
+
+
+def test_init_schema_creates_custom_backtests_table(db):
+    tables = db.conn.execute("SHOW TABLES").fetchall()
+    names = {t[0] for t in tables}
+    assert "custom_backtests" in names
+
+
+def test_init_schema_is_idempotent_with_new_schema(db):
+    """Running init_schema() twice on an already-migrated DB is safe."""
+    db.init_schema()  # second call
+    count = db.conn.execute("SELECT COUNT(*) FROM ohlcv").fetchone()[0]
+    assert count == 0  # no data added, just no crash

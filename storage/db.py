@@ -1,9 +1,12 @@
 # storage/db.py
+import logging
 import threading
 import duckdb
 import pandas as pd
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 class Database:
@@ -34,22 +37,69 @@ class Database:
             cols = [d[0] for d in self.conn.description]
             return rows, cols
 
+    def _migrate_interval_schema(self):
+        """Migrate ohlcv and indicators to multi-interval schema if not already done. Idempotent."""
+        ohlcv_cols = {r[1] for r in self._exec("PRAGMA table_info(ohlcv)").fetchall()}
+        if 'interval' not in ohlcv_cols:
+            self._exec("ALTER TABLE ohlcv RENAME TO ohlcv_old")
+            self._exec("""
+                CREATE TABLE ohlcv (
+                    timestamp TIMESTAMP, interval TEXT,
+                    open DOUBLE, high DOUBLE, low DOUBLE, close DOUBLE, volume DOUBLE,
+                    PRIMARY KEY (timestamp, interval)
+                )
+            """)
+            self._exec("""
+                INSERT INTO ohlcv
+                SELECT timestamp::TIMESTAMP, '1d', open, high, low, close, volume
+                FROM ohlcv_old
+            """)
+            self._exec("DROP TABLE ohlcv_old")
+            logger.info("Migrated ohlcv table to multi-interval schema.")
+
+        ind_cols = {r[1] for r in self._exec("PRAGMA table_info(indicators)").fetchall()}
+        if 'interval' not in ind_cols:
+            self._exec("ALTER TABLE indicators RENAME TO indicators_old")
+            self._exec("""
+                CREATE TABLE indicators (
+                    timestamp TIMESTAMP, interval TEXT,
+                    ema_20 DOUBLE, ema_50 DOUBLE, ema_200 DOUBLE,
+                    atr_14 DOUBLE, adx_14 DOUBLE, rsi_14 DOUBLE,
+                    bb_upper DOUBLE, bb_lower DOUBLE, bb_mid DOUBLE,
+                    volume_sma_20 DOUBLE,
+                    PRIMARY KEY (timestamp, interval)
+                )
+            """)
+            self._exec("""
+                INSERT INTO indicators
+                SELECT timestamp::TIMESTAMP, '1d', ema_20, ema_50, ema_200,
+                       atr_14, adx_14, rsi_14, bb_upper, bb_lower, bb_mid, volume_sma_20
+                FROM indicators_old
+            """)
+            self._exec("DROP TABLE indicators_old")
+            logger.info("Migrated indicators table to multi-interval schema.")
+
     def init_schema(self):
         self._exec("""
             CREATE TABLE IF NOT EXISTS ohlcv (
-                timestamp DATE PRIMARY KEY,
-                open DOUBLE, high DOUBLE, low DOUBLE, close DOUBLE, volume DOUBLE
+                timestamp TIMESTAMP,
+                interval  TEXT,
+                open DOUBLE, high DOUBLE, low DOUBLE, close DOUBLE, volume DOUBLE,
+                PRIMARY KEY (timestamp, interval)
             )
         """)
         self._exec("""
             CREATE TABLE IF NOT EXISTS indicators (
-                timestamp DATE PRIMARY KEY,
+                timestamp TIMESTAMP,
+                interval  TEXT,
                 ema_20 DOUBLE, ema_50 DOUBLE, ema_200 DOUBLE,
                 atr_14 DOUBLE, adx_14 DOUBLE, rsi_14 DOUBLE,
                 bb_upper DOUBLE, bb_lower DOUBLE, bb_mid DOUBLE,
-                volume_sma_20 DOUBLE
+                volume_sma_20 DOUBLE,
+                PRIMARY KEY (timestamp, interval)
             )
         """)
+        self._migrate_interval_schema()
         self._exec("CREATE SEQUENCE IF NOT EXISTS strategy_runs_id_seq")
         self._exec("""
             CREATE TABLE IF NOT EXISTS strategy_runs (
@@ -87,42 +137,90 @@ class Database:
                 PRIMARY KEY (date, run_id)
             )
         """)
+        self._exec("CREATE SEQUENCE IF NOT EXISTS custom_backtests_id_seq")
+        self._exec("""
+            CREATE TABLE IF NOT EXISTS custom_backtests (
+                id                      INTEGER PRIMARY KEY DEFAULT nextval('custom_backtests_id_seq'),
+                created_at              TIMESTAMP DEFAULT current_timestamp,
+                run_id                  INTEGER REFERENCES strategy_runs(id),
+                interval                TEXT,
+                date_from               TIMESTAMP,
+                date_to                 TIMESTAMP,
+                regime_filter_mode      TEXT,
+                regime_filter_overrides TEXT,
+                sharpe                  DOUBLE,
+                sortino                 DOUBLE,
+                max_drawdown_pct        DOUBLE,
+                max_drawdown_days       INTEGER,
+                win_rate                DOUBLE,
+                avg_rr                  DOUBLE,
+                total_trades            INTEGER,
+                pct_time_in_market      DOUBLE,
+                cagr                    DOUBLE,
+                error_message           TEXT
+            )
+        """)
 
     def upsert_ohlcv(self, rows: list[dict]):
-        if not rows:
-            return
-        df = pd.DataFrame(rows)
-        with self._lock:
-            self.conn.execute("INSERT OR REPLACE INTO ohlcv SELECT * FROM df")
+        """Insert/replace 1d OHLCV rows. Delegates to upsert_ohlcv_interval."""
+        self.upsert_ohlcv_interval(rows, '1d')
 
     def latest_ohlcv_timestamp(self) -> Optional[date]:
         with self._lock:
-            result = self.conn.execute("SELECT MAX(timestamp) FROM ohlcv").fetchone()
+            result = self.conn.execute(
+                "SELECT MAX(timestamp)::DATE FROM ohlcv WHERE interval = '1d'"
+            ).fetchone()
         return result[0] if result else None
 
     def get_ohlcv(self, start: date, end: date) -> pd.DataFrame:
         return self._exec_df(
-            "SELECT * FROM ohlcv WHERE timestamp >= ? AND timestamp <= ? ORDER BY timestamp",
+            """SELECT timestamp, open, high, low, close, volume FROM ohlcv
+               WHERE interval = '1d' AND timestamp >= ? AND timestamp <= ?
+               ORDER BY timestamp""",
             [start, end]
         )
 
     def upsert_indicators(self, rows: list[dict]):
-        if not rows:
-            return
-        df = pd.DataFrame(rows)
-        with self._lock:
-            self.conn.execute("INSERT OR REPLACE INTO indicators SELECT * FROM df")
+        """Insert/replace 1d indicator rows. Delegates to upsert_indicators_interval."""
+        self.upsert_indicators_interval(rows, '1d')
 
     def get_indicators(self, start: date, end: date) -> pd.DataFrame:
         return self._exec_df(
-            "SELECT * FROM indicators WHERE timestamp >= ? AND timestamp <= ? ORDER BY timestamp",
+            """SELECT timestamp, ema_20, ema_50, ema_200, atr_14, adx_14, rsi_14,
+                      bb_upper, bb_lower, bb_mid, volume_sma_20
+               FROM indicators
+               WHERE interval = '1d' AND timestamp >= ? AND timestamp <= ?
+               ORDER BY timestamp""",
             [start, end]
         )
 
     def get_recent_indicators(self, days: int) -> pd.DataFrame:
         return self._exec_df(
-            "SELECT * FROM indicators ORDER BY timestamp DESC LIMIT ?", [days]
+            """SELECT timestamp, ema_20, ema_50, ema_200, atr_14, adx_14, rsi_14,
+                      bb_upper, bb_lower, bb_mid, volume_sma_20
+               FROM indicators WHERE interval = '1d'
+               ORDER BY timestamp DESC LIMIT ?""",
+            [days]
         )
+
+    def upsert_ohlcv_interval(self, rows: list[dict], interval: str):
+        """Stub — full implementation in Task 2."""
+        if not rows:
+            return
+        df = pd.DataFrame([{**r, 'interval': interval} for r in rows])
+        df = df[['timestamp', 'interval', 'open', 'high', 'low', 'close', 'volume']]
+        with self._lock:
+            self.conn.execute("INSERT OR REPLACE INTO ohlcv SELECT * FROM df")
+
+    def upsert_indicators_interval(self, rows: list[dict], interval: str):
+        """Stub — full implementation in Task 2."""
+        if not rows:
+            return
+        df = pd.DataFrame([{**r, 'interval': interval} for r in rows])
+        df = df[['timestamp', 'interval', 'ema_20', 'ema_50', 'ema_200',
+                 'atr_14', 'adx_14', 'rsi_14', 'bb_upper', 'bb_lower', 'bb_mid', 'volume_sma_20']]
+        with self._lock:
+            self.conn.execute("INSERT OR REPLACE INTO indicators SELECT * FROM df")
 
     def insert_strategy_run(self, strategy_json: str) -> int:
         with self._lock:
