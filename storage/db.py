@@ -213,8 +213,31 @@ class Database:
             return
         df = pd.DataFrame([{**r, 'interval': interval} for r in rows])
         df = df[['timestamp', 'interval', 'open', 'high', 'low', 'close', 'volume']]
+        df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True).dt.tz_localize(None)
         with self._lock:
             self.conn.execute("INSERT OR REPLACE INTO ohlcv SELECT * FROM df")
+
+    def latest_ohlcv_timestamp_interval(self, interval: str) -> Optional[datetime]:
+        """Return the most recent OHLCV timestamp for the given interval, or None."""
+        result = self._exec(
+            "SELECT MAX(timestamp) FROM ohlcv WHERE interval = ?", [interval]
+        ).fetchone()
+        val = result[0] if result else None
+        if val is None:
+            return None
+        if hasattr(val, 'tzinfo') and val.tzinfo is None:
+            from datetime import timezone
+            val = val.replace(tzinfo=timezone.utc)
+        return val
+
+    def get_ohlcv_interval(self, interval: str, start: datetime, end: datetime) -> pd.DataFrame:
+        """Return OHLCV DataFrame for a given interval and date range."""
+        return self._exec_df(
+            """SELECT timestamp, open, high, low, close, volume FROM ohlcv
+               WHERE interval = ? AND timestamp >= ? AND timestamp <= ?
+               ORDER BY timestamp""",
+            [interval, start, end]
+        )
 
     def upsert_indicators_interval(self, rows: list[dict], interval: str):
         """Insert/replace indicator rows for the given interval."""
@@ -223,8 +246,78 @@ class Database:
         df = pd.DataFrame([{**r, 'interval': interval} for r in rows])
         df = df[['timestamp', 'interval', 'ema_20', 'ema_50', 'ema_200',
                  'atr_14', 'adx_14', 'rsi_14', 'bb_upper', 'bb_lower', 'bb_mid', 'volume_sma_20']]
+        df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True).dt.tz_localize(None)
         with self._lock:
             self.conn.execute("INSERT OR REPLACE INTO indicators SELECT * FROM df")
+
+    def get_indicators_interval(self, interval: str, start: datetime, end: datetime) -> pd.DataFrame:
+        """Return indicators DataFrame for a given interval and date range."""
+        return self._exec_df(
+            """SELECT timestamp, ema_20, ema_50, ema_200, atr_14, adx_14, rsi_14,
+                      bb_upper, bb_lower, bb_mid, volume_sma_20
+               FROM indicators
+               WHERE interval = ? AND timestamp >= ? AND timestamp <= ?
+               ORDER BY timestamp""",
+            [interval, start, end]
+        )
+
+    def insert_custom_backtest(self, params: dict) -> int:
+        """Create a custom backtest row with total_trades=-1 (in-progress sentinel). Returns id."""
+        with self._lock:
+            result = self.conn.execute("""
+                INSERT INTO custom_backtests
+                (run_id, interval, date_from, date_to, regime_filter_mode,
+                 regime_filter_overrides, total_trades)
+                VALUES (?, ?, ?, ?, ?, ?, -1)
+                RETURNING id
+            """, [
+                params["run_id"], params["interval"],
+                params["date_from"], params["date_to"],
+                params["regime_filter_mode"], params["regime_filter_overrides"],
+            ]).fetchone()
+        return result[0]
+
+    def update_custom_backtest_results(self, backtest_id: int, metrics: dict):
+        """Write completed backtest metrics to a custom_backtests row."""
+        self._exec("""
+            UPDATE custom_backtests SET
+                sharpe = ?, sortino = ?, max_drawdown_pct = ?, max_drawdown_days = ?,
+                win_rate = ?, avg_rr = ?, total_trades = ?, pct_time_in_market = ?, cagr = ?
+            WHERE id = ?
+        """, [
+            metrics["sharpe"], metrics["sortino"], metrics["max_drawdown_pct"],
+            metrics["max_drawdown_days"], metrics["win_rate"], metrics["avg_rr"],
+            metrics["total_trades"], metrics["pct_time_in_market"], metrics["cagr"],
+            backtest_id,
+        ])
+
+    def get_custom_backtest(self, backtest_id: int) -> Optional[dict]:
+        """Fetch a single custom_backtests row by id."""
+        rows, cols = self._exec_rows(
+            "SELECT * FROM custom_backtests WHERE id = ?", [backtest_id]
+        )
+        if not rows:
+            return None
+        return dict(zip(cols, rows[0]))
+
+    def all_custom_backtests(self) -> list[dict]:
+        """Return all custom backtest rows joined with strategy_json, newest first."""
+        rows, cols = self._exec_rows("""
+            SELECT cb.*, sr.strategy_json
+            FROM custom_backtests cb
+            LEFT JOIN strategy_runs sr ON cb.run_id = sr.id
+            ORDER BY cb.created_at DESC
+        """)
+        if not rows:
+            return []
+        return [dict(zip(cols, r)) for r in rows]
+
+    def set_custom_backtest_error(self, backtest_id: int, error_message: str):
+        """Set total_trades=-2 (error sentinel) and store the error message."""
+        self._exec("""
+            UPDATE custom_backtests SET total_trades = -2, error_message = ?
+            WHERE id = ?
+        """, [error_message, backtest_id])
 
     def insert_strategy_run(self, strategy_json: str) -> int:
         with self._lock:

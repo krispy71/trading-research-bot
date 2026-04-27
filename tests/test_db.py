@@ -138,3 +138,118 @@ def test_init_schema_is_idempotent_with_new_schema(db):
     db.init_schema()  # second call
     count = db.conn.execute("SELECT COUNT(*) FROM ohlcv").fetchone()[0]
     assert count == 0  # no data added, just no crash
+
+
+from datetime import datetime, timezone
+
+def test_upsert_ohlcv_interval_stores_intraday(db):
+    rows = [
+        {"timestamp": datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc),
+         "open": 40000.0, "high": 41000.0, "low": 39000.0, "close": 40500.0, "volume": 100.0},
+        {"timestamp": datetime(2024, 1, 1, 0, 15, tzinfo=timezone.utc),
+         "open": 40500.0, "high": 42000.0, "low": 40000.0, "close": 41000.0, "volume": 120.0},
+    ]
+    db.upsert_ohlcv_interval(rows, '15m')
+    count = db.conn.execute("SELECT COUNT(*) FROM ohlcv WHERE interval='15m'").fetchone()[0]
+    assert count == 2
+
+
+def test_latest_ohlcv_timestamp_interval(db):
+    rows = [
+        {"timestamp": datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc),
+         "open": 40000.0, "high": 41000.0, "low": 39000.0, "close": 40500.0, "volume": 100.0},
+        {"timestamp": datetime(2024, 1, 1, 0, 15, tzinfo=timezone.utc),
+         "open": 40500.0, "high": 42000.0, "low": 40000.0, "close": 41000.0, "volume": 120.0},
+    ]
+    db.upsert_ohlcv_interval(rows, '15m')
+    latest = db.latest_ohlcv_timestamp_interval('15m')
+    assert latest == datetime(2024, 1, 1, 0, 15, tzinfo=timezone.utc)
+    assert db.latest_ohlcv_timestamp_interval('1h') is None
+
+
+def test_get_ohlcv_interval(db):
+    rows = [
+        {"timestamp": datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc),
+         "open": 40000.0, "high": 41000.0, "low": 39000.0, "close": 40500.0, "volume": 100.0},
+    ]
+    db.upsert_ohlcv_interval(rows, '1h')
+    df = db.get_ohlcv_interval('1h',
+        datetime(2024, 1, 1, tzinfo=timezone.utc),
+        datetime(2024, 1, 2, tzinfo=timezone.utc))
+    assert len(df) == 1
+    assert df.iloc[0]["close"] == 40500.0
+
+
+def test_upsert_indicators_interval(db):
+    rows = [{"timestamp": datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc),
+             "ema_20": 1.0, "ema_50": 2.0, "ema_200": 3.0,
+             "atr_14": 4.0, "adx_14": 5.0, "rsi_14": 6.0,
+             "bb_upper": 7.0, "bb_lower": 8.0, "bb_mid": 9.0, "volume_sma_20": 10.0}]
+    db.upsert_indicators_interval(rows, '1h')
+    count = db.conn.execute("SELECT COUNT(*) FROM indicators WHERE interval='1h'").fetchone()[0]
+    assert count == 1
+
+
+def test_get_indicators_interval(db):
+    rows = [{"timestamp": datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc),
+             "ema_20": 1.0, "ema_50": 2.0, "ema_200": 3.0,
+             "atr_14": 4.0, "adx_14": 5.0, "rsi_14": 6.0,
+             "bb_upper": 7.0, "bb_lower": 8.0, "bb_mid": 9.0, "volume_sma_20": 10.0}]
+    db.upsert_indicators_interval(rows, '1h')
+    df = db.get_indicators_interval('1h',
+        datetime(2024, 1, 1, tzinfo=timezone.utc),
+        datetime(2024, 1, 2, tzinfo=timezone.utc))
+    assert len(df) == 1
+    assert df.iloc[0]["ema_20"] == 1.0
+
+
+def test_insert_custom_backtest_and_get(db):
+    run_id = db.insert_strategy_run('{"name": "test"}')
+    from datetime import datetime, timezone
+    backtest_id = db.insert_custom_backtest({
+        "run_id": run_id,
+        "interval": "1h",
+        "date_from": datetime(2024, 1, 1, tzinfo=timezone.utc),
+        "date_to": datetime(2024, 6, 1, tzinfo=timezone.utc),
+        "regime_filter_mode": "strategy",
+        "regime_filter_overrides": "{}",
+    })
+    assert backtest_id is not None
+    row = db.get_custom_backtest(backtest_id)
+    assert row["interval"] == "1h"
+    assert row["total_trades"] == -1  # in-progress sentinel
+
+
+def test_update_custom_backtest_results(db):
+    run_id = db.insert_strategy_run('{}')
+    from datetime import datetime, timezone
+    backtest_id = db.insert_custom_backtest({
+        "run_id": run_id,
+        "interval": "4h",
+        "date_from": datetime(2024, 1, 1, tzinfo=timezone.utc),
+        "date_to": datetime(2024, 6, 1, tzinfo=timezone.utc),
+        "regime_filter_mode": "disabled",
+        "regime_filter_overrides": "{}",
+    })
+    db.update_custom_backtest_results(backtest_id, {
+        "sharpe": 1.2, "sortino": 1.8, "max_drawdown_pct": 0.12,
+        "max_drawdown_days": 30, "win_rate": 0.55, "avg_rr": 1.5,
+        "total_trades": 20, "pct_time_in_market": 0.4, "cagr": 0.18,
+    })
+    row = db.get_custom_backtest(backtest_id)
+    assert row["total_trades"] == 20
+    assert row["sharpe"] == 1.2
+
+
+def test_all_custom_backtests(db):
+    run_id = db.insert_strategy_run('{}')
+    from datetime import datetime, timezone
+    db.insert_custom_backtest({
+        "run_id": run_id, "interval": "1d",
+        "date_from": datetime(2024, 1, 1, tzinfo=timezone.utc),
+        "date_to": datetime(2024, 6, 1, tzinfo=timezone.utc),
+        "regime_filter_mode": "strategy", "regime_filter_overrides": "{}",
+    })
+    rows = db.all_custom_backtests()
+    assert len(rows) == 1
+    assert rows[0]["interval"] == "1d"
