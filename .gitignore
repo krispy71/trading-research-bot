@@ -6,3 +6,6 @@ __pycache__/
 .env
 *.egg-info/
 .venv/
+lib/
+lib64/
+bin/
