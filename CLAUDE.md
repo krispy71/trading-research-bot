@@ -41,3 +41,5 @@ Single-indicator systems are not acceptable.
 - Stops must be **invalidation-based** (structural), never arbitrary fixed percentages
 - The strategy must be willing to **sit in cash** — refusing to trade is a valid output
 - Be honest about drawdown profiles and failure modes; do not oversell
+
+Save all plans and code to ./docs/plans/ instead of global directories..
